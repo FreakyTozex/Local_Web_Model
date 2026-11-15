@@ -173,6 +173,16 @@ async function sendMessage(text) {
   if (!text && files.length) parts.unshift({type: 'text', text: 'Analisa os ficheiros anexados.'});
   history.push({role: 'user', content: parts});
   const body = addMessage('assistant');
+  const thinking = document.createElement('span');
+  thinking.className = 'thinking-indicator';
+  thinking.setAttribute('role', 'status');
+  thinking.setAttribute('aria-label', 'A pensar');
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement('span');
+    dot.setAttribute('aria-hidden', 'true');
+    thinking.append(dot);
+  }
+  body.append(thinking);
   let answer = '';
   try {
     const response = await fetch('/api/chat', {
@@ -207,9 +217,11 @@ async function sendMessage(text) {
       body.textContent = answer;
     }
     if (answer) history.push({role: 'assistant', content: answer});
+    else body.replaceChildren();
   } catch (err) {
     if (err.name === 'AbortError') {
       if (answer) history.push({role: 'assistant', content: answer});
+      else body.replaceChildren();
     } else {
       body.textContent = `Erro: ${err.message}`;
       body.classList.add('error');
