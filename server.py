@@ -203,9 +203,10 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(502, {"error": detail or str(exc)})
                 except (BrokenPipeError, ConnectionResetError):
                     pass
-        except (URLError, TimeoutError, ValueError, KeyError, OSError, zipfile.BadZipFile, ET.ParseError, RuntimeError) as exc:
+        except Exception as exc:
             try:
-                self.send_json(502, {"error": str(exc)})
+                status = 400 if self.path == "/api/extract" else 502
+                self.send_json(status, {"error": f"{type(exc).__name__}: {exc}"})
             except (BrokenPipeError, ConnectionResetError):
                 pass
 

@@ -60,7 +60,7 @@ function addMessage(role, text = '') {
 }
 
 function showError(message) {
-  const body = addMessage('assistant', `Não consegui ligar ao modelo. ${message}`);
+  const body = addMessage('assistant', `Erro: ${message}`);
   body.classList.add('error');
 }
 
