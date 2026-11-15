@@ -11,6 +11,31 @@ import io
 import zipfile
 import xml.etree.ElementTree as ET
 
+ROOT = Path(__file__).resolve().parent
+
+
+def load_dotenv(path):
+    if not path.is_file():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        if key:
+            os.environ.setdefault(key, value)
+
+
+load_dotenv(ROOT / ".env")
+
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 MAX_EXTRACTED_CHARS = 500_000
 MAX_DOCUMENT_IMAGES = 8
@@ -63,9 +88,9 @@ def extract_document(filename, raw):
         return {"text": text[:MAX_EXTRACTED_CHARS], "images": images, "page_count": len(pdf)}
     raise ValueError("Formato não suportado. Usa PDF ou Word (.docx).")
 
-ROOT = Path(__file__).resolve().parent
 MODEL_URL = os.environ.get("MODEL_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
 API_KEY = os.environ.get("MODEL_API_KEY", "")
+PORT = int(os.environ.get("PORT", "8000"))
 
 
 def api_headers():
@@ -189,6 +214,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "8000"))
-    print(f"Webapp em http://127.0.0.1:{port} — modelo em {MODEL_URL}")
-    ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    print(f"Webapp em http://127.0.0.1:{PORT} — modelo em {MODEL_URL}")
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
