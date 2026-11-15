@@ -14,6 +14,7 @@ let activeRequest = null;
 let activeChatId = null;
 let savedModelToRestore = null;
 let databasePromise = null;
+let currentResponseId = null;
 
 function setConnection(online, text) {
   connection.classList.toggle('offline', !online);
@@ -115,7 +116,9 @@ async function saveCurrentChat(chatId, chatHistory) {
   try {
     await storeSavedChat({
       id: chatId, title, history: chatHistory, displayMessages,
-      model: modelSelect.value, updatedAt: Date.now()
+      model: modelSelect.value,
+      responseId: activeChatId === chatId ? currentResponseId : null,
+      updatedAt: Date.now()
     });
     await renderChatList();
   } catch (err) {
@@ -130,6 +133,7 @@ async function restoreChat(id) {
     if (!chat) return;
     activeChatId = chat.id;
     history = chat.history || [];
+    currentResponseId = chat.responseId || null;
     pendingFiles = [];
     renderAttachments();
     messagesEl.replaceChildren();
@@ -270,6 +274,7 @@ async function sendMessage(text) {
   const chatId = activeChatId || makeChatId();
   activeChatId = chatId;
   const chatHistory = history;
+  const responseIdForRequest = currentResponseId;
   setBusy(true);
   activeRequest = new AbortController();
   const displayText = [text, ...files.map(({file}) => `📎 ${file.name}`)].filter(Boolean).join('\n');
@@ -307,11 +312,15 @@ async function sendMessage(text) {
     thinking.append(dot);
   }
   body.append(thinking);
+  const agentStatus = document.createElement('small');
+  agentStatus.className = 'agent-status';
+  body.append(agentStatus);
   let answer = '';
+  let newResponseId = null;
   try {
     const response = await fetch('/api/chat', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({model: modelSelect.value, messages: chatHistory}),
+      body: JSON.stringify({model: modelSelect.value, messages: chatHistory, response_id: responseIdForRequest}),
       signal: activeRequest.signal
     });
     if (!response.ok) {
@@ -330,6 +339,15 @@ async function sendMessage(text) {
       for (const line of lines) {
         if (!line.trim()) continue;
         const chunk = JSON.parse(line);
+        if (chunk.response_id) newResponseId = chunk.response_id;
+        if (chunk.error) throw new Error(chunk.error);
+        if (chunk.tool_event) {
+          const {name, status} = chunk.tool_event;
+          agentStatus.textContent = status === 'start'
+            ? `A usar ${name}…`
+            : status === 'success' ? 'A processar resultados…' : `Falhou: ${name}`;
+          continue;
+        }
         const token = chunk.message?.content || '';
         if (!token) continue;
         answer += token;
@@ -339,6 +357,8 @@ async function sendMessage(text) {
     }
     if (pending.trim()) {
       const chunk = JSON.parse(pending);
+      if (chunk.response_id) newResponseId = chunk.response_id;
+      if (chunk.error) throw new Error(chunk.error);
       const token = chunk.message?.content || '';
       if (token) {
         answer += token;
@@ -346,10 +366,12 @@ async function sendMessage(text) {
       }
     }
     if (answer) chatHistory.push({role: 'assistant', content: answer});
+    if (activeChatId === chatId && newResponseId) currentResponseId = newResponseId;
     if (activeChatId === chatId) await saveCurrentChat(chatId, chatHistory);
   } catch (err) {
     if (err.name === 'AbortError') {
       if (answer) chatHistory.push({role: 'assistant', content: answer});
+      if (activeChatId === chatId && newResponseId) currentResponseId = newResponseId;
       if (activeChatId === chatId && answer) await saveCurrentChat(chatId, chatHistory);
     } else {
       body.textContent = `Erro: ${err.message}`;
@@ -394,6 +416,7 @@ document.querySelector('#refresh').addEventListener('click', loadModels);
 document.querySelector('#new-chat').addEventListener('click', () => {
   if (busy) activeRequest?.abort();
   activeChatId = null;
+  currentResponseId = null;
   history = [];
   pendingFiles = [];
   renderAttachments();
