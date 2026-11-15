@@ -34,42 +34,11 @@ LMSTUDIO_INTEGRATIONS_JSON=[]
 
 `MODEL_API_KEY` pode ficar vazio se a autenticação estiver desligada no LM Studio. O ficheiro `.env` é ignorado pelo Git; `.env.example` serve de modelo.
 
-## Acesso à Internet com MCP
+## Pesquisa na Internet
 
-A app usa a API nativa `/api/v1/chat` do LM Studio, que permite ao modelo chamar ferramentas MCP. Requer LM Studio 0.4.0 ou superior. A app não inclui um serviço de pesquisa: instala/configura um MCP de pesquisa ou navegador no LM Studio e permite o seu uso pelo servidor API.
+Ativa **Pesquisar na Internet** junto à caixa de mensagem antes de enviar uma pergunta. A app pesquisa na web no servidor local e passa até cinco títulos e ligações como contexto ao modelo, pedindo-lhe para citar as fontes. A pesquisa funciona com a API compatível com OpenAI e não depende da configuração MCP do Bionic ou do LM Studio. O PC que executa `server.py` precisa de acesso à Internet.
 
-1. No LM Studio, configura um MCP de pesquisa/navegação em **Program > MCP**. Por exemplo, o Playwright MCP oficial usa Node.js 20 ou superior e esta configuração em `mcp.json`:
-
-   ```json
-   {
-     "mcpServers": {
-       "playwright": {
-         "command": "npx",
-         "args": ["@playwright/mcp@latest"]
-       }
-     }
-   }
-   ```
-
-   O Playwright MCP permite ao agente abrir páginas e interagir com elas. Consulta a [documentação do LM Studio sobre MCP](https://lmstudio.ai/docs/app/mcp) e o [guia oficial do Playwright MCP](https://playwright.dev/docs/getting-started-mcp).
-2. Em **Developer > Server Settings**, ativa a permissão adequada: **Allow calling servers from mcp.json** para MCPs guardados no LM Studio, ou **Allow per-request MCPs** para MCPs remotos definidos em cada pedido.
-3. No `.env`, indica a integração configurada. Por exemplo, se o servidor MCP tiver o identificador `playwright`:
-
-   ```dotenv
-   LMSTUDIO_CHAT_MODE=native
-   LMSTUDIO_INTEGRATIONS_JSON=["mcp/playwright"]
-   ```
-
-   Para limitar o acesso a ferramentas específicas, usa um objeto:
-
-   ```dotenv
-   LMSTUDIO_INTEGRATIONS_JSON=[{"type":"plugin","id":"mcp/playwright","allowed_tools":["browser_navigate"]}]
-   ```
-
-   Substitui o identificador e os nomes das ferramentas pelos que o teu MCP realmente disponibiliza. MCPs definidos em `mcp.json` requerem autenticação da API no LM Studio; guarda o token em `MODEL_API_KEY`. Usa apenas MCPs de confiança, porque as ferramentas podem aceder à rede ou executar ações no computador.
-4. Reinicia `server.py`. Quando o modelo chamar uma ferramenta, a app mostra o nome durante a execução.
-
-O identificador e a lista de ferramentas dependem do MCP que instalares. O modelo também tem de suportar chamadas a ferramentas. Se precisares de usar apenas a API OpenAI-compatible antiga, define `LMSTUDIO_CHAT_MODE=openai`; nesse modo, as integrações MCP não ficam disponíveis.
+Isto fornece pesquisa e leitura dos resumos apresentados pelo motor de pesquisa; não abre páginas completas nem executa ações interativas no browser. Para navegação completa ou outras ferramentas, é necessário ligar a app a um runtime que exponha essas ferramentas pela API. A configuração MCP do Bionic aplica-se ao agente dentro do Bionic e não é automaticamente partilhada com esta webapp.
 
 ## Anexos e controlo da resposta
 

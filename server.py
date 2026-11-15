@@ -3,6 +3,8 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlencode, urlparse, parse_qs
+from html.parser import HTMLParser
 from pathlib import Path
 import json
 import os
@@ -40,6 +42,56 @@ load_dotenv(ROOT / ".env")
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 MAX_EXTRACTED_CHARS = 500_000
 MAX_DOCUMENT_IMAGES = 8
+
+
+class SearchResultsParser(HTMLParser):
+    """Extract DuckDuckGo HTML result links and snippets."""
+    def __init__(self):
+        super().__init__()
+        self.results = []
+        self.current = None
+        self.capture = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = attrs.get("class", "").split()
+        if tag == "a" and "result__a" in classes:
+            self.current = {"title": "", "url": attrs.get("href", "")}
+            parsed = urlparse(self.current["url"])
+            redirect = parse_qs(parsed.query).get("uddg")
+            if redirect:
+                self.current["url"] = redirect[0]
+            self.capture = "title"
+        elif self.results and "result__snippet" in classes:
+            self.current = self.results[-1]
+            self.current["snippet"] = ""
+            self.capture = "snippet"
+
+    def handle_data(self, data):
+        if self.current is not None and self.capture:
+            self.current[self.capture] += data
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self.capture == "title" and self.current:
+            self.capture = None
+            if self.current.get("title"):
+                self.results.append(self.current)
+                self.current = None
+        elif self.current is not None and self.capture == "snippet" and tag in ("a", "div"):
+            self.capture = None
+            self.current = None
+
+
+def web_search(query):
+    if not query.strip():
+        return []
+    url = "https://html.duckduckgo.com/html/?" + urlencode({"q": query[:500]})
+    req = Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"})
+    with urlopen(req, timeout=15) as response:
+        markup = response.read(2_000_000).decode("utf-8", errors="replace")
+    parser = SearchResultsParser()
+    parser.feed(markup)
+    return parser.results[:5]
 
 
 def extract_document(filename, raw):
@@ -151,6 +203,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
+        if self.path.startswith("/api/search?"):
+            query = parse_qs(urlparse(self.path).query).get("q", [""])[0]
+            try:
+                self.send_json(200, {"results": web_search(query)})
+            except (HTTPError, URLError, TimeoutError, ValueError) as exc:
+                self.send_json(502, {"error": f"A pesquisa na Internet falhou: {exc}"})
+            return
         if self.path == "/api/models":
             try:
                 req = Request(MODEL_URL + "/models", headers=api_headers())

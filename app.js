@@ -7,6 +7,7 @@ const messagesEl = document.querySelector('#messages');
 const welcome = document.querySelector('#welcome');
 const filePicker = document.querySelector('#file-picker');
 const attachmentsEl = document.querySelector('#attachments');
+const webSearchToggle = document.querySelector('#web-search');
 let history = [];
 let pendingFiles = [];
 let busy = false;
@@ -264,6 +265,7 @@ function setBusy(value) {
   sendButton.setAttribute('aria-label', value ? 'Parar resposta' : 'Enviar mensagem');
   sendButton.title = value ? 'Parar resposta' : 'Enviar mensagem';
   document.querySelector('#attach').disabled = value;
+  webSearchToggle.disabled = value;
   renderChatList();
 }
 
@@ -299,8 +301,7 @@ async function sendMessage(text) {
     }
   }
   if (!text && files.length) parts.unshift({type: 'text', text: 'Analisa os ficheiros anexados.'});
-  chatHistory.push({role: 'user', content: parts});
-  await saveCurrentChat(chatId, chatHistory);
+  
   const body = addMessage('assistant');
   const thinking = document.createElement('span');
   thinking.className = 'thinking-indicator';
@@ -317,7 +318,25 @@ async function sendMessage(text) {
   body.append(agentStatus);
   let answer = '';
   let newResponseId = null;
+  let userMessageAdded = false;
   try {
+    if (webSearchToggle.checked && text) {
+      agentStatus.textContent = 'A pesquisar na Internet…';
+      const searchResponse = await fetch(`/api/search?q=${encodeURIComponent(text)}`, {signal: activeRequest.signal});
+      const searchData = await searchResponse.json();
+      if (!searchResponse.ok) throw new Error(searchData.error || 'Falha na pesquisa na Internet.');
+      const results = searchData.results || [];
+      const research = results.length
+        ? `\n\nResultados de pesquisa na Internet (usa apenas como fontes e inclui as ligações relevantes na resposta):\n${results.map((r, i) => `${i + 1}. ${r.title}\nURL: ${r.url}${r.snippet ? `\nResumo: ${r.snippet}` : ''}`).join('\n\n')}`
+        : '\n\nA pesquisa na Internet não encontrou resultados.';
+      const lastPart = parts.find(part => part.type === 'text');
+      if (lastPart) lastPart.text += research;
+      else parts.unshift({type: 'text', text: research});
+      agentStatus.textContent = results.length ? `A consultar ${results.length} resultados…` : '';
+    }
+    chatHistory.push({role: 'user', content: parts});
+    userMessageAdded = true;
+    await saveCurrentChat(chatId, chatHistory);
     const response = await fetch('/api/chat', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({model: modelSelect.value, messages: chatHistory, response_id: responseIdForRequest}),
@@ -376,7 +395,7 @@ async function sendMessage(text) {
     } else {
       body.textContent = `Erro: ${err.message}`;
       body.classList.add('error');
-      chatHistory.pop();
+      if (userMessageAdded) chatHistory.pop();
     }
   } finally {
     activeRequest = null;
