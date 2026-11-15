@@ -6,6 +6,62 @@ from urllib.request import Request, urlopen
 from pathlib import Path
 import json
 import os
+import base64
+import io
+import zipfile
+import xml.etree.ElementTree as ET
+
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
+MAX_EXTRACTED_CHARS = 500_000
+MAX_DOCUMENT_IMAGES = 8
+
+
+def extract_document(filename, raw):
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".docx":
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            document = ET.fromstring(archive.read("word/document.xml"))
+            ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+            paragraphs = []
+            for paragraph in document.findall(".//w:p", ns):
+                text = "".join(node.text or "" for node in paragraph.findall(".//w:t", ns))
+                if text.strip():
+                    paragraphs.append(text)
+            images = []
+            for name in archive.namelist():
+                if not name.startswith("word/media/") or name.endswith("/"):
+                    continue
+                ext = Path(name).suffix.lower()
+                mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}.get(ext)
+                if not mime or len(images) >= MAX_DOCUMENT_IMAGES:
+                    continue
+                data = archive.read(name)
+                if len(data) <= 12 * 1024 * 1024:
+                    images.append({"url": f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"})
+            return {"text": "\n".join(paragraphs)[:MAX_EXTRACTED_CHARS], "images": images}
+    if suffix == ".pdf":
+        try:
+            import pymupdf
+        except ImportError as exc:
+            raise RuntimeError("Para ler PDF, instala as dependências com: pip install -r requirements.txt") from exc
+        try:
+            pdf = pymupdf.open(stream=raw, filetype="pdf")
+        except Exception as exc:
+            raise ValueError("Não foi possível abrir este PDF. Confirma que o ficheiro não está danificado ou protegido por palavra-passe.") from exc
+        page_texts = [page.get_text().strip() for page in pdf]
+        text = "\n\n".join(f"[Página {i + 1}]\n{content}" for i, content in enumerate(page_texts) if content)
+        if len(pdf) <= MAX_DOCUMENT_IMAGES:
+            render_indices = range(len(pdf))
+        else:
+            render_indices = [i for i, content in enumerate(page_texts) if not content][:MAX_DOCUMENT_IMAGES]
+        images = []
+        for i in render_indices:
+            pixmap = pdf[i].get_pixmap(matrix=pymupdf.Matrix(1.25, 1.25), alpha=False)
+            images.append({"url": "data:image/png;base64," + base64.b64encode(pixmap.tobytes("png")).decode("ascii"), "page": i + 1})
+        if not text and not images:
+            raise ValueError("Não foi possível extrair texto ou imagens deste PDF.")
+        return {"text": text[:MAX_EXTRACTED_CHARS], "images": images, "page_count": len(pdf)}
+    raise ValueError("Formato não suportado. Usa PDF ou Word (.docx).")
 
 ROOT = Path(__file__).resolve().parent
 MODEL_URL = os.environ.get("MODEL_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
@@ -65,12 +121,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
-        if self.path != "/api/chat":
+        if self.path not in ("/api/chat", "/api/extract"):
             self.send_error(404)
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
+            if length > 22 * 1024 * 1024:
+                self.send_json(413, {"error": "O pedido excede o limite de tamanho."})
+                return
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if self.path == "/api/extract":
+                name = Path(payload["name"]).name
+                raw = base64.b64decode(payload["data"], validate=True)
+                if len(raw) > MAX_UPLOAD_BYTES:
+                    self.send_json(413, {"error": "O ficheiro excede o limite de 15 MB."})
+                    return
+                self.send_json(200, extract_document(name, raw))
+                return
             req = Request(
                 MODEL_URL + "/chat/completions",
                 data=json.dumps({
@@ -111,7 +178,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(502, {"error": detail or str(exc)})
                 except (BrokenPipeError, ConnectionResetError):
                     pass
-        except (URLError, TimeoutError, ValueError, KeyError, OSError) as exc:
+        except (URLError, TimeoutError, ValueError, KeyError, OSError, zipfile.BadZipFile, ET.ParseError, RuntimeError) as exc:
             try:
                 self.send_json(502, {"error": str(exc)})
             except (BrokenPipeError, ConnectionResetError):

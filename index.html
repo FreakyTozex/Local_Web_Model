@@ -11,8 +11,6 @@
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">✳</span><span>conversa<span class="muted"> local</span></span></div>
     <button id="new-chat" class="new-chat"><span>＋</span> Nova conversa</button>
-    <div class="side-note"><span class="dot"></span> A correr no teu computador</div>
-    <div class="side-bottom">As mensagens ficam nesta sessão.<br>O modelo corre localmente.</div>
   </aside>
   <main class="main">
     <header class="topbar">
@@ -21,23 +19,21 @@
     </header>
     <section id="conversation" class="conversation" aria-live="polite">
       <div id="welcome" class="welcome">
-        <div class="welcome-icon">✳</div>
-        <p class="eyebrow">O TEU ESPAÇO PRIVADO</p>
-        <h1>Em que estás a pensar?</h1>
-        <p class="welcome-sub">Conversa diretamente com o modelo que está a correr no teu computador.</p>
+        <h1>Em que posso ajudar?</h1>
         <div class="suggestions">
-          <button class="suggestion">Resume este texto para mim</button>
-          <button class="suggestion">Ajuda-me a pensar numa ideia</button>
-          <button class="suggestion">Explica um conceito complicado</button>
+          <button class="suggestion">Resume um documento</button>
+          <button class="suggestion">Analisa uma imagem</button>
+          <button class="suggestion">Ajuda-me com uma ideia</button>
         </div>
       </div>
       <div id="messages" class="messages"></div>
     </section>
     <form id="composer" class="composer">
+      <div id="attachments" class="attachments"></div>
       <textarea id="prompt" rows="1" placeholder="Escreve uma mensagem…" aria-label="Mensagem"></textarea>
-      <div class="composer-footer"><span>Enter para enviar · Shift+Enter para nova linha</span><button id="send" type="submit" aria-label="Enviar mensagem">↑</button></div>
+      <div class="composer-footer"><div class="composer-actions"><button id="attach" type="button" aria-label="Anexar ficheiros" title="Anexar ficheiros">＋</button><span>Enter envia · Shift+Enter nova linha</span></div><button id="send" type="submit" aria-label="Enviar mensagem">↑</button></div>
     </form>
-    <p class="disclaimer">As respostas podem conter erros. Confirma informação importante.</p>
+    <input id="file-picker" type="file" multiple hidden accept=".txt,.md,.csv,.tsv,.json,.xml,.html,.css,.js,.ts,.py,.java,.c,.cpp,.h,.hpp,.rs,.go,.php,.rb,.sh,.ps1,.yaml,.yml,.toml,.ini,.log,.sql,.r,.ipynb,.pdf,.docx,text/*,image/png,image/jpeg,image/webp,image/gif">
   </main>
   <script src="/app.js"></script>
 </body>
