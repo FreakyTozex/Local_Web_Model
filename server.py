@@ -88,7 +88,7 @@ def extract_document(filename, raw):
         return {"text": text[:MAX_EXTRACTED_CHARS], "images": images, "page_count": len(pdf)}
     raise ValueError("Formato não suportado. Usa PDF ou Word (.docx).")
 
-MODEL_URL = os.environ.get("MODEL_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
+MODEL_URL = os.environ.get("MODEL_BASE_URL", "http://127.0.0.1:1235/v1").rstrip("/")
 API_KEY = os.environ.get("MODEL_API_KEY", "")
 PORT = int(os.environ.get("PORT", "8000"))
 
@@ -214,5 +214,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Webapp em http://127.0.0.1:{PORT} — modelo em {MODEL_URL}")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    print(f"Webapp em http://0.0.0.0:{PORT} — modelo em {MODEL_URL}")
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
