@@ -206,22 +206,25 @@ async function sendMessage(text) {
       for (const line of lines) {
         if (!line.trim()) continue;
         const chunk = JSON.parse(line);
-        answer += chunk.message?.content || '';
+        const token = chunk.message?.content || '';
+        if (!token) continue;
+        answer += token;
         body.textContent = answer;
         body.parentElement.parentElement.scrollIntoView({behavior: 'smooth', block: 'nearest'});
       }
     }
     if (pending.trim()) {
       const chunk = JSON.parse(pending);
-      answer += chunk.message?.content || '';
-      body.textContent = answer;
+      const token = chunk.message?.content || '';
+      if (token) {
+        answer += token;
+        body.textContent = answer;
+      }
     }
     if (answer) history.push({role: 'assistant', content: answer});
-    else body.replaceChildren();
   } catch (err) {
     if (err.name === 'AbortError') {
       if (answer) history.push({role: 'assistant', content: answer});
-      else body.replaceChildren();
     } else {
       body.textContent = `Erro: ${err.message}`;
       body.classList.add('error');
