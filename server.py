@@ -6,6 +6,7 @@ from urllib.request import Request, urlopen
 from pathlib import Path
 import json
 import os
+import sys
 import base64
 import io
 import zipfile
@@ -68,7 +69,11 @@ def extract_document(filename, raw):
         try:
             import pymupdf
         except ImportError as exc:
-            raise RuntimeError("Para ler PDF, instala as dependências com: pip install -r requirements.txt") from exc
+            repair_command = f'"{sys.executable}" -m pip install --upgrade --force-reinstall PyMuPDF'
+            raise RuntimeError(
+                f"O Python usado pela app não conseguiu importar PyMuPDF. Interpretador: {sys.executable}. "
+                f"Erro original: {exc}. Para instalar/reparar neste mesmo Python, executa: {repair_command}"
+            ) from exc
         try:
             pdf = pymupdf.open(stream=raw, filetype="pdf")
         except Exception as exc:

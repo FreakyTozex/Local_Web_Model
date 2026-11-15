@@ -38,6 +38,8 @@ Usa o botão **＋** junto à caixa de mensagem para anexar ficheiros PDF, Word 
 
 O limite por ficheiro é 2 MB para texto, 15 MB para PDF/Word e 12 MB para imagens. PDF protegido por palavra-passe e o formato Word antigo (.doc) não são suportados. Durante a geração, o botão de envio muda para **■**; carrega nele para parar a resposta.
 
+Se a leitura de PDF falhar por causa do PyMuPDF, a mensagem de erro indica o interpretador Python usado pelo servidor e o comando de reparação correspondente. Usa esse comando no terminal e reinicia a app.
+
 Por omissão, a aplicação usa a API em `http://127.0.0.1:1234/v1`.
 
 ## Privacidade
