@@ -11,6 +11,9 @@ let history = [];
 let pendingFiles = [];
 let busy = false;
 let activeRequest = null;
+let activeChatId = null;
+let savedModelToRestore = null;
+let databasePromise = null;
 
 function setConnection(online, text) {
   connection.classList.toggle('offline', !online);
@@ -25,6 +28,7 @@ async function loadModels() {
     if (!res.ok) throw new Error(data.error || 'Falha ao carregar modelos.');
     if (!data.models.length) throw new Error('Não há modelos disponíveis no LM Studio.');
     modelSelect.innerHTML = data.models.map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    if (savedModelToRestore && data.models.includes(savedModelToRestore)) modelSelect.value = savedModelToRestore;
     setConnection(true, 'Ligado ao LM Studio');
   } catch (err) {
     modelSelect.innerHTML = '<option value="">Sem ligação</option>';
@@ -35,6 +39,121 @@ async function loadModels() {
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function openChatDatabase() {
+  if (databasePromise) return databasePromise;
+  databasePromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open('conversa-local', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('chats', {keyPath: 'id'});
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  return databasePromise;
+}
+
+async function getSavedChats() {
+  const db = await openChatDatabase();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction('chats', 'readonly').objectStore('chats').getAll();
+    request.onsuccess = () => resolve(request.result.sort((a, b) => b.updatedAt - a.updatedAt));
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getSavedChat(id) {
+  const db = await openChatDatabase();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction('chats', 'readonly').objectStore('chats').get(id);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function storeSavedChat(chat) {
+  const db = await openChatDatabase();
+  return new Promise((resolve, reject) => {
+    const request = db.transaction('chats', 'readwrite').objectStore('chats').put(chat);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function renderChatList() {
+  const list = document.querySelector('#chat-list');
+  try {
+    const chats = await getSavedChats();
+    list.replaceChildren();
+    for (const chat of chats) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'saved-chat';
+      button.classList.toggle('active', chat.id === activeChatId);
+      button.textContent = chat.title || 'Nova conversa';
+      button.title = chat.title || 'Nova conversa';
+      button.disabled = busy;
+      button.addEventListener('click', () => restoreChat(chat.id));
+      list.append(button);
+    }
+  } catch (err) {
+    console.warn('Não foi possível carregar o histórico local:', err);
+  }
+}
+
+function makeChatId() {
+  return crypto.randomUUID ? crypto.randomUUID() : `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function saveCurrentChat(chatId, chatHistory) {
+  if (!chatId || !chatHistory.length) return;
+  const displayMessages = [...messagesEl.querySelectorAll('.message')].map(message => ({
+    role: message.classList.contains('user') ? 'user' : 'assistant',
+    text: message.querySelector('.message-body')?.textContent || ''
+  }));
+  const firstUser = displayMessages.find(message => message.role === 'user');
+  const title = (firstUser?.text || 'Nova conversa').replace(/\s+/g, ' ').slice(0, 48);
+  try {
+    await storeSavedChat({
+      id: chatId, title, history: chatHistory, displayMessages,
+      model: modelSelect.value, updatedAt: Date.now()
+    });
+    await renderChatList();
+  } catch (err) {
+    console.warn('Não foi possível guardar o histórico local:', err);
+  }
+}
+
+async function restoreChat(id) {
+  if (busy) return;
+  try {
+    const chat = await getSavedChat(id);
+    if (!chat) return;
+    activeChatId = chat.id;
+    history = chat.history || [];
+    pendingFiles = [];
+    renderAttachments();
+    messagesEl.replaceChildren();
+    const savedMessages = chat.displayMessages || [];
+    welcome.classList.toggle('hidden', savedMessages.length > 0);
+    savedMessages.forEach(message => addMessage(message.role, message.text));
+    if (chat.model) {
+      savedModelToRestore = chat.model;
+      if ([...modelSelect.options].some(option => option.value === chat.model)) modelSelect.value = chat.model;
+    }
+    await renderChatList();
+  } catch (err) {
+    showError(`Não foi possível abrir esta conversa: ${err.message}`);
+  }
+}
+
+async function restoreLatestChat() {
+  try {
+    const chats = await getSavedChats();
+    if (chats.length) await restoreChat(chats[0].id);
+    else await renderChatList();
+  } catch (err) {
+    console.warn('Não foi possível inicializar o histórico local:', err);
+  }
 }
 
 function addMessage(role, text = '') {
@@ -141,12 +260,16 @@ function setBusy(value) {
   sendButton.setAttribute('aria-label', value ? 'Parar resposta' : 'Enviar mensagem');
   sendButton.title = value ? 'Parar resposta' : 'Enviar mensagem';
   document.querySelector('#attach').disabled = value;
+  renderChatList();
 }
 
 async function sendMessage(text) {
   const files = pendingFiles.slice();
   if ((!text && !files.length) || busy) return;
   if (!modelSelect.value) { showError('Confirma que o servidor local do LM Studio está ativo e que tens um modelo carregado.'); return; }
+  const chatId = activeChatId || makeChatId();
+  activeChatId = chatId;
+  const chatHistory = history;
   setBusy(true);
   activeRequest = new AbortController();
   const displayText = [text, ...files.map(({file}) => `📎 ${file.name}`)].filter(Boolean).join('\n');
@@ -171,7 +294,8 @@ async function sendMessage(text) {
     }
   }
   if (!text && files.length) parts.unshift({type: 'text', text: 'Analisa os ficheiros anexados.'});
-  history.push({role: 'user', content: parts});
+  chatHistory.push({role: 'user', content: parts});
+  await saveCurrentChat(chatId, chatHistory);
   const body = addMessage('assistant');
   const thinking = document.createElement('span');
   thinking.className = 'thinking-indicator';
@@ -187,7 +311,7 @@ async function sendMessage(text) {
   try {
     const response = await fetch('/api/chat', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({model: modelSelect.value, messages: history}),
+      body: JSON.stringify({model: modelSelect.value, messages: chatHistory}),
       signal: activeRequest.signal
     });
     if (!response.ok) {
@@ -221,14 +345,16 @@ async function sendMessage(text) {
         body.textContent = answer;
       }
     }
-    if (answer) history.push({role: 'assistant', content: answer});
+    if (answer) chatHistory.push({role: 'assistant', content: answer});
+    if (activeChatId === chatId) await saveCurrentChat(chatId, chatHistory);
   } catch (err) {
     if (err.name === 'AbortError') {
-      if (answer) history.push({role: 'assistant', content: answer});
+      if (answer) chatHistory.push({role: 'assistant', content: answer});
+      if (activeChatId === chatId && answer) await saveCurrentChat(chatId, chatHistory);
     } else {
       body.textContent = `Erro: ${err.message}`;
       body.classList.add('error');
-      history.pop();
+      chatHistory.pop();
     }
   } finally {
     activeRequest = null;
@@ -267,11 +393,13 @@ filePicker.addEventListener('change', async () => {
 document.querySelector('#refresh').addEventListener('click', loadModels);
 document.querySelector('#new-chat').addEventListener('click', () => {
   if (busy) activeRequest?.abort();
+  activeChatId = null;
   history = [];
   pendingFiles = [];
   renderAttachments();
   messagesEl.replaceChildren();
   welcome.classList.remove('hidden');
+  renderChatList();
   promptBox.focus();
 });
 document.querySelectorAll('.suggestion').forEach(button => button.addEventListener('click', () => {
@@ -280,3 +408,4 @@ document.querySelectorAll('.suggestion').forEach(button => button.addEventListen
   promptBox.setSelectionRange(promptBox.value.length, promptBox.value.length);
 }));
 loadModels();
+restoreLatestChat();

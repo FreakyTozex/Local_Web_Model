@@ -42,6 +42,6 @@ Se a leitura de PDF falhar por causa do PyMuPDF, a mensagem de erro indica o int
 
 Por omissão, a aplicação usa a API em `http://127.0.0.1:1234/v1`.
 
-## Privacidade
+## Persistência e privacidade
 
-O histórico existe apenas na memória do separador do navegador. O servidor não grava conversas em disco. A webapp escuta apenas em `127.0.0.1`, e encaminha pedidos para o endereço indicado em `MODEL_BASE_URL`.
+As conversas são guardadas no armazenamento local do navegador (IndexedDB), incluindo o contexto das mensagens e anexos, para poderem ser reabertas depois de fechar o separador. O histórico fica nesse perfil de navegador e não é sincronizado entre dispositivos. O servidor da app não grava conversas em disco. A webapp escuta apenas em `127.0.0.1` e encaminha pedidos para o endereço indicado em `MODEL_BASE_URL`.
