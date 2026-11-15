@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101411">
+  <title>Conversa local</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">✳</span><span>conversa<span class="muted"> local</span></span></div>
+    <button id="new-chat" class="new-chat"><span>＋</span> Nova conversa</button>
+    <div class="side-note"><span class="dot"></span> A correr no teu computador</div>
+    <div class="side-bottom">As mensagens ficam nesta sessão.<br>O modelo corre localmente.</div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <div class="model-wrap"><label for="model">MODELO</label><select id="model"><option value="">A procurar modelos…</option></select><button id="refresh" title="Atualizar modelos" aria-label="Atualizar modelos">↻</button></div>
+      <div id="connection" class="connection"><span class="dot"></span><span>A ligar…</span></div>
+    </header>
+    <section id="conversation" class="conversation" aria-live="polite">
+      <div id="welcome" class="welcome">
+        <div class="welcome-icon">✳</div>
+        <p class="eyebrow">O TEU ESPAÇO PRIVADO</p>
+        <h1>Em que estás a pensar?</h1>
+        <p class="welcome-sub">Conversa diretamente com o modelo que está a correr no teu computador.</p>
+        <div class="suggestions">
+          <button class="suggestion">Resume este texto para mim</button>
+          <button class="suggestion">Ajuda-me a pensar numa ideia</button>
+          <button class="suggestion">Explica um conceito complicado</button>
+        </div>
+      </div>
+      <div id="messages" class="messages"></div>
+    </section>
+    <form id="composer" class="composer">
+      <textarea id="prompt" rows="1" placeholder="Escreve uma mensagem…" aria-label="Mensagem"></textarea>
+      <div class="composer-footer"><span>Enter para enviar · Shift+Enter para nova linha</span><button id="send" type="submit" aria-label="Enviar mensagem">↑</button></div>
+    </form>
+    <p class="disclaimer">As respostas podem conter erros. Confirma informação importante.</p>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
